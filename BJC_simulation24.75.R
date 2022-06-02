@@ -18,9 +18,7 @@ set.seed(seed)
 b11 <- -5.5
 b12 <- 0.5
 a1 <- 1
-#Patz et al., JAMA internal medicine 2014
-#assumed an exponential distribution
-#estimates for sojourn time of non-BAC NSCLC = 3.6 years using NLST data
+#time from cancer precursor to clinical cancer
 b21 <- -3+log(2)
 b22 <- 0.5
 a2 <- 2   
@@ -50,8 +48,7 @@ t_death <- ifelse(t3<=t1,t3,
 #14% with cancer before death
 t_can <- ifelse((t1<t3) & ((t1+t2)<(t1+t4)),(t1+t2),NA)
 t_precan <- ifelse(t1<t3,t1,NA)
-#check against Patz et al. numbers
-summary(t_can[t_can<=15]-t_precan[t_can<=15],na.rm=TRUE) 
+
 v0 <- 0 #runif(num,min=0,max=25) #enrollment date and first screen for screening arm
 n_visits <- sample.int(15, num, replace= TRUE)-1 #15 #uncomment for no dropout
 intervals <- rnorm(sum(n_visits),1,0.25)
