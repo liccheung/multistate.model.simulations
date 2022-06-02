@@ -42,10 +42,10 @@ t2 <- rgamma(num,shape=a2,rate=exp(b21)*exp(b22*x)) #sojourn time
 t3 <- rgamma(num,shape=a3,rate=exp(b31)*exp(b32*x)) #time from healthy to death
 t4 <- rgamma(num,shape=a4,rate=exp(b41)*exp(b42*x)) #time from cancer precursor to death
 t5 <- rgamma(num,shape=a5,rate=exp(b51)*exp(b52*x)) #time from clinical cancer to death
-#set to ~25% overall deaths after 15 years according to LYFS-CT mortality model for smokers, age 40-84
+#set to ~35% overall deaths after 15 years according to LYFS-CT mortality model for heavy smokers, age 40-84
 t_death <- ifelse(t3<=t1,t3,
                   ifelse(((t1+t4)<=(t1+t2)),(t1+t4),(t1+t2+t5)))
-#14% with cancer before death
+#23% with cancer before death
 t_can <- ifelse((t1<t3) & ((t1+t2)<(t1+t4)),(t1+t2),NA)
 t_precan <- ifelse(t1<t3,t1,NA)
   
