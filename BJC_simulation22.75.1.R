@@ -1,5 +1,8 @@
 #correctly specified Markov model
 #Bernoulli distributed covariate
+#n.sim - number of simulation data sets to run
+#output1 - filename of output
+#seed - seed number for simulation run
 sim.fun <- function(n.sim,output1,seed){
 #no measurement error
 #no covariates
@@ -11,13 +14,13 @@ num <- nsim*n
 set.seed(seed)
 
 #set parameters
-#(a1,b1) are gamma parameters for time to preclinical cancer
+#(a1,b1) are gamma parameters for time to cancer precursor
 b11 <- -5.5
 b12 <- 1.5
 a1 <- 1
 #Patz et al., JAMA internal medicine 2014
 #assumed an exponential distribution
-#estimates for sojourn time of non-BAC NSCLC = 3.6 using NLST data
+#estimates for sojourn time of non-BAC NSCLC = 3.6 years using NLST data
 b21 <- -3
 b22 <- 1.5
 a2 <- 1   
@@ -25,7 +28,7 @@ a2 <- 1
 b31 <- -4
 b32 <- 0.5
 a3 <- 1   
-#time to death from precancer
+#time to death from cancer precursor
 b41 <- -4
 b42 <- 0.5
 a4 <- 1 
@@ -36,21 +39,18 @@ a5 <- 1
 theta <- c(b11,b31,b21,b41,b51,b12,b32,b22,b42,b52)
 #Simulate times
 x <- rbinom(num,1,.5)
-t1 <- rgamma(num,shape=a1,rate=exp(b11)*exp(b12*x)) #time from healthy (age 45) to preclinical cancer
+t1 <- rgamma(num,shape=a1,rate=exp(b11)*exp(b12*x)) #time to cancer precursor
 t2 <- rgamma(num,shape=a2,rate=exp(b21)*exp(b22*x)) #sojourn time
 t3 <- rgamma(num,shape=a3,rate=exp(b31)*exp(b32*x)) #time from healthy to death
-t4 <- rgamma(num,shape=a4,rate=exp(b41)*exp(b42*x)) #time from preclinical cancer to death
+t4 <- rgamma(num,shape=a4,rate=exp(b41)*exp(b42*x)) #time from cancer precursor to death
 t5 <- rgamma(num,shape=a5,rate=exp(b51)*exp(b52*x)) #time from clinical cancer to death
-#t_death: Q1=69.5, Q2=77, Q3=86.4
-#UK CMI overall mortality actuary tables for smokers: Q1=70, Q2=78, Q3=85
-#poorly calibrated in the tails
-#code death in absence of screening with 18% alive after 90
+#set to ~25% overall deaths after 15 years according to LYFS-CT mortality model for smokers, age 40-84
 t_death <- ifelse(t3<=t1,t3,
                   ifelse(((t1+t4)<=(t1+t2)),(t1+t4),(t1+t2+t5)))
-#19% with cancer before death
+#14% with cancer before death
 t_can <- ifelse((t1<t3) & ((t1+t2)<(t1+t4)),(t1+t2),NA)
 t_precan <- ifelse(t1<t3,t1,NA)
-v0 <- 0 #runif(num,min=0,max=25) #enrollment date and first screen for screening arm
+v0 <- 0 #runif(num,min=0,max=25) #enrollment date and first screen
 n_visits <- sample.int(15, num, replace= TRUE)-1 #15 #uncomment for no dropout
 intervals <- rnorm(sum(n_visits),1,0.25)
 intervals[intervals<0] <- 0
@@ -188,6 +188,7 @@ for (j in 1:nsim){
                     method="BFGS", control=list(trace=TRUE), hessian=TRUE)
   lcl <- lik_sim$par - 1.96*sqrt(diag(solve(lik_sim$hessian)))
   ucl <- lik_sim$par + 1.96*sqrt(diag(solve(lik_sim$hessian)))
+  #confidence intervals for sojourn times in healthy, cancer precursor, and clinical cancer states
   ST1_lcl <- 1/sum(exp(lik_sim$par[1:2])) - 1.96*1/sum(exp(lik_sim$par[1:2]))^2*
     sqrt(exp(2*lik_sim$par[1])*solve(lik_sim$hessian)[1,1]+exp(2*lik_sim$par[2])*solve(lik_sim$hessian)[2,2]+2*exp(sum(lik_sim$par[1:2]))*solve(lik_sim$hessian)[1,2])
   ST1_ucl <- 1/sum(exp(lik_sim$par[1:2])) + 1.96*1/sum(exp(lik_sim$par[1:2]))^2*
