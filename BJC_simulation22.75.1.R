@@ -45,8 +45,10 @@ t5 <- rgamma(num,shape=a5,rate=exp(b51)*exp(b52*x)) #time from clinical cancer t
 #set to ~35% overall deaths after 15 years according to LYFS-CT mortality model for heavy smokers, age 40-84
 t_death <- ifelse(t3<=t1,t3,
                   ifelse(((t1+t4)<=(t1+t2)),(t1+t4),(t1+t2+t5)))
-#23% with cancer before death
+table(t_death<=15)  
+#7% with cancer before death
 t_can <- ifelse((t1<t3) & ((t1+t2)<(t1+t4)),(t1+t2),NA)
+table(is.na(t_can)==0 & t_can<=15)  
 t_precan <- ifelse(t1<t3,t1,NA)
   
 v0 <- 0 #runif(num,min=0,max=25) #enrollment date and first screen
