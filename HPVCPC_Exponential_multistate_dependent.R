@@ -2,9 +2,8 @@
 sim.fun <- function(n.sim,output1,seed){
 library(msm)
 library(survival)
-#increases number of infections to 3
-#only 1 type
-#General simulation settings
+#allow 3 reinfections
+#non-genotype specific HPV infections
 nsim <- n.sim #number of simulation datasets 
 n <- 10000 #number of samples in each dataset
 num <- nsim*n
@@ -13,22 +12,21 @@ set.seed(seed)
 #LCC: Parameter values - set up so time represents years
 p1 <- .1
 p2 <- .5
-p3 <- .055 #LCC: Didem's paper - 5.5% of HPV+ have prevalent CIN3+
-#LCC: Didem's paper -4% of HPV- have HPV ~3 years later
+p3 <- .055 #LCC: Didem Egemen's paper - 5.5% of HPV+ have prevalent CIN3+
+#Didem Egemen's paper -4% of HPV- have HPV ~3 years later
 lambda1 <- 0.055
-#LCC: clearance parameters from Sally's paper
+#Sally Adebamovo's paper assumes Weibull clearance
 shape21 <- 1 #0.702
 scale21 <- 1.5
-#LCC: Didem's paper - approximately 2% of HPV+ are already cervical precancer at first detection
-#LCC: Didem's paper - 3.8% progressed to cervical precancer in 5 years
+#Didem's paper - approximately ~2% of HPV+ already have cervical precancer at first detection under doctor's care obbservation scheme
+#Didem's paper - 3.8% of new HPV+ progressed to cervical precancer in 5 years
 shape22 <- 1
 scale22 <- 60
-#mean duration is scale22*gamma(1+1/shape22) is approximately 9.6 years from HPV acquisition to clearance
 
 #Part 1
 #Initial state t0
 h1 <- rbinom(num,1,(p1)) #binary where 1 signifies HPV+ individuals
-h1[h1==1] <- 2*rbinom(length(h1[h1==1]),1,p3)+1 #for low risk types, 1=low risk 3=pre-cancer
+h1[h1==1] <- 2*rbinom(length(h1[h1==1]),1,p3)+1 #for HPV+, 1=HPV+ 3=pre-cancer (expandable to 1=low-risk HPV, 2=high-risk HPV)
 
 #Part 2
 #Time to t1
@@ -90,9 +88,8 @@ time_point <- function(visit_time){
   return(visit_fx)
 }
 
-#dependent visits - 5 years for HPV+ result in very few visits before year 10, 
-#try 3 years and add more variance - may need smaller
-maxtime <- ifelse(rbinom(num,1,.3),12,runif(num,0,12))  #increased maxtime to 12
+#dependent visits - 3 years for HPV-, 1 year for HPV+
+maxtime <- ifelse(rbinom(num,1,.3),12,runif(num,0,12))
 r0v3 <- h1
 v1_intervals <- ifelse(h1==0,rnorm(sum(h1==0),3,0.5),rnorm(sum(h1>0),1,0.25))
 v1_intervals[v1_intervals<0] <- 0
@@ -182,7 +179,7 @@ theta <- c(lambda1,1/scale21,1/scale22)
 #estimate for baseline HPV+, baseline HPV-, and new HPV+ (where the previous recorded visit was HPV-)
 hpvcc.msm <- msm(state ~ years, subject=id, data=obsdat, qmatrix=Q, opt.method="optim")
 
-p <- pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3]/(pmatrix.msm(hpvcc.msm,t1=0,t=10)[1,2]+pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3])
+p <- pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3]/(pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,2]+pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3])
 res <- c(hpvcc.msm$estimates.t,
          hpvcc.msm$QmatricesSE$baseline[1,2],hpvcc.msm$QmatricesSE$baseline[2,1],hpvcc.msm$QmatricesSE$baseline[2,3],
          hpvcc.msm$QmatricesL$baseline[1,2]<=0.055 & hpvcc.msm$QmatricesU$baseline[1,2]>=0.055,
