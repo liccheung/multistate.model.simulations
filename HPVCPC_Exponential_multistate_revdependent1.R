@@ -1,4 +1,4 @@
-#multistate models under follow-up advoidance
+#multistate models under follow-up advoidance: 3 year interval folllowing HPV-negative, 5 year interval following HPV-positive
 sim.fun <- function(n.sim,output1,seed){
 library(msm)
 library(survival)
@@ -10,20 +10,18 @@ n <- 10000 #number of samples in each dataset
 num <- nsim*n
 set.seed(seed)
 
-#LCC: Parameter values - set up so time represents years
+#Parameter values - set up so time represents years
 p1 <- .1
 p2 <- .5
-p3 <- .055 #LCC: Didem's paper - 5.5% of HPV+ have prevalent CIN3+
-#LCC: Didem's paper -4% of HPV- have HPV ~3 years later
+p3 <- .055 #Didem Egemen's paper - 5.5% of HPV+ have prevalent CIN3+
+#parameter for acquisition of HPV
 lambda1 <- 0.055
-#LCC: clearance parameters from Sally's paper
+#clearance parameters
 shape21 <- 1 #0.702
 scale21 <- 1.5
-#LCC: Didem's paper - approximately 2% of HPV+ are already cervical precancer at first detection
-#LCC: Didem's paper - 3.8% progressed to cervical precancer in 5 years
+#progression parameters
 shape22 <- 1
 scale22 <- 60
-#mean duration is scale22*gamma(1+1/shape22) is approximately 9.6 years from HPV acquisition to clearance
 
 #Part 1
 #Initial state t0
@@ -31,7 +29,7 @@ h1 <- rbinom(num,1,(p1)) #binary where 1 signifies HPV+ individuals
 h1[h1==1] <- 2*rbinom(length(h1[h1==1]),1,p3)+1 #for low risk types, 1=low risk 3=pre-cancer
 
 #Part 2
-#Time to t1
+#Times to HPV acquisition, clearance, and progression t precancer
 t1 <- rexp(num,lambda1) #time from HPV- to HPV+
 #Time to t2 - Progression or Clearance
 t21 <- rweibull(num,shape21,scale21)  #time to clearance
@@ -90,8 +88,7 @@ time_point <- function(visit_time){
   return(visit_fx)
 }
 
-#dependent visits - 5 years for HPV+ result in very few visits before year 10, 
-#try 3 years and add more variance - may need smaller
+#dependent visits - 3 years following HPV- / 5years following HPV+
 maxtime <- ifelse(rbinom(num,1,.3),12,runif(num,0,12))  #increased maxtime to 12
 r0v3 <- h1
 v1_intervals <- ifelse(h1==0,rnorm(sum(h1==0),3,0.5),rnorm(sum(h1>0),5,0.5))
@@ -182,12 +179,14 @@ theta <- c(lambda1,1/scale21,1/scale22)
 #estimate for baseline HPV+, baseline HPV-, and new HPV+ (where the previous recorded visit was HPV-)
 hpvcc.msm <- msm(state ~ years, subject=id, data=obsdat, qmatrix=Q, opt.method="optim")
 
-p <- pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3]/(pmatrix.msm(hpvcc.msm,t1=0,t=10)[1,2]+pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3])
+#prevalence of precancer for newly detected HPV infections at a 5-year visit
+p <- pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3]/(pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,2]+pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3])
 res <- c(hpvcc.msm$estimates.t,
          hpvcc.msm$QmatricesSE$baseline[1,2],hpvcc.msm$QmatricesSE$baseline[2,1],hpvcc.msm$QmatricesSE$baseline[2,3],
          hpvcc.msm$QmatricesL$baseline[1,2]<=0.055 & hpvcc.msm$QmatricesU$baseline[1,2]>=0.055,
          hpvcc.msm$QmatricesL$baseline[2,1]<=(1/1.5) & hpvcc.msm$QmatricesU$baseline[2,1]>=(1/1.5),
          hpvcc.msm$QmatricesL$baseline[2,3]<=(1/60) & hpvcc.msm$QmatricesU$baseline[2,3]>=(1/60),
+         #risk following HPV-negative at first visit
          pmatrix.msm(hpvcc.msm,t1=0,t=0.5)[1,3],pmatrix.msm(hpvcc.msm,t1=0,t=1)[1,3],
          pmatrix.msm(hpvcc.msm,t1=0,t=1.5)[1,3],pmatrix.msm(hpvcc.msm,t1=0,t=2)[1,3],
          pmatrix.msm(hpvcc.msm,t1=0,t=2.5)[1,3],pmatrix.msm(hpvcc.msm,t1=0,t=3)[1,3],
@@ -198,6 +197,7 @@ res <- c(hpvcc.msm$estimates.t,
          pmatrix.msm(hpvcc.msm,t1=0,t=7.5)[1,3],pmatrix.msm(hpvcc.msm,t1=0,t=8)[1,3],
          pmatrix.msm(hpvcc.msm,t1=0,t=8.5)[1,3],pmatrix.msm(hpvcc.msm,t1=0,t=9)[1,3],
          pmatrix.msm(hpvcc.msm,t1=0,t=9.5)[1,3],pmatrix.msm(hpvcc.msm,t1=0,t=10)[1,3],
+         #risk following HPV-positive at first visit
          sum(h1==3)/sum(h1>=1),
          sum(h1==3)/sum(h1>=1)+(1-sum(h1==3)/sum(h1>=1))*pmatrix.msm(hpvcc.msm,t1=0,t=0.5)[2,3],
          sum(h1==3)/sum(h1>=1)+(1-sum(h1==3)/sum(h1>=1))*pmatrix.msm(hpvcc.msm,t1=0,t=1)[2,3],
@@ -219,6 +219,7 @@ res <- c(hpvcc.msm$estimates.t,
          sum(h1==3)/sum(h1>=1)+(1-sum(h1==3)/sum(h1>=1))*pmatrix.msm(hpvcc.msm,t1=0,t=9)[2,3],
          sum(h1==3)/sum(h1>=1)+(1-sum(h1==3)/sum(h1>=1))*pmatrix.msm(hpvcc.msm,t1=0,t=9.5)[2,3],
          sum(h1==3)/sum(h1>=1)+(1-sum(h1==3)/sum(h1>=1))*pmatrix.msm(hpvcc.msm,t1=0,t=10)[2,3],
+         #risk following new HPV-positive detected at a 5-year visit
          p,
          p+(1-p)*pmatrix.msm(hpvcc.msm,t1=0,t=0.5)[2,3],
          p+(1-p)*pmatrix.msm(hpvcc.msm,t1=0,t=1)[2,3],
