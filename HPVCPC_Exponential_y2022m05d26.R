@@ -29,7 +29,7 @@ shape22 <- 1
 scale22 <- 60
 
 #Part 1
-#Initial state t0
+#Times to acquisition, clearance, and progression allowing for reinfection
 h1 <- rbinom(num,1,(p1)) #binary where 1 signifies HPV+ individuals
 h1[h1==1] <- 2*rbinom(length(h1[h1==1]),1,p3)+1 #for low risk types, 1=low risk 3=pre-cancer
 
