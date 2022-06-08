@@ -1,3 +1,7 @@
+#This program generates data under patient advoidant observation schemes.
+#Precancer risk estimates are from healthy vs. precancer survival approach (EM-ICM to account for left-, interval-, and right-censoring)
+#Precancer risk estimates are for initially HPV-negative, initially HPV-positive, and new HPV-positive
+
 #increases number of infections to 3
 #only 1 type
 library(tidyverse)
@@ -10,20 +14,18 @@ n <- 10000 #number of samples in each dataset
 num <- nsim*n
 set.seed(12726)
 
-#LCC: Parameter values - set up so time represents years
+#Parameter values - set up so time represents years
 p1 <- .1
 p2 <- .5
-p3 <- .055 #LCC: Didem's paper - 5.5% of HPV+ have prevalent CIN3+
-#LCC: Didem's paper -4% of HPV- have HPV ~3 years later
+p3 <- .055 #Didem Egemen's paper - 5.5% of HPV+ have prevalent CIN3+
+#parameter for acquisition of HPV
 lambda1 <- 0.055
-#LCC: clearance parameters from Sally's paper
+#clearance parameters
 shape21 <- 1 #0.702
 scale21 <- 1.5
-#LCC: Didem's paper - approximately 2% of HPV+ are already cervical precancer at first detection
-#LCC: Didem's paper - 3.8% progressed to cervical precancer in 5 years
+#progression parameters
 shape22 <- 1
 scale22 <- 60
-#mean duration is scale22*gamma(1+1/shape22) is approximately 9.6 years from HPV acquisition to clearance
 
 #Part 1
 #Initial state t0
@@ -90,8 +92,7 @@ time_point <- function(visit_time){
   return(visit_fx)
 }
 
-#dependent visits - 5 years for HPV+ result in very few visits before year 10, 
-#try 3 years and add more variance - may need smaller
+#dependent visits - 3 year interval following HPV-negative and 5-year following HPV-positive results
 maxtime <- ifelse(rbinom(num,1,.3),12,runif(num,0,12))  #increased maxtime to 12
 r0v3 <- h1
 v1_intervals <- ifelse(h1==0,rnorm(sum(h1==0),3,0.5),rnorm(sum(h1>0),5,0.5))
@@ -164,11 +165,12 @@ for (j in 1:nsim){
   print(j)
   lower <- (j-1)*n+1
   upper <- j*n
-  #Dependent Observation Intervals Risk (Obs3)
-  
+  #dataset j  
   xsam3 <- data.frame(obsdat3[lower:upper,])
   
-  #HPV- at enrollment
+  #Relative to first visit, time interval in which precancer occurred
+  #precancers present at time of first visit occur in time interval (-0.01,0]
+  #time to last precancer negative assessment
   lower3 <- ifelse(xsam3$r10v3<3,xsam3$v10v3,
                    ifelse(xsam3$r9v3<3,xsam3$v9v3, 
                           ifelse(xsam3$r8v3<3,xsam3$v8v3,
@@ -177,11 +179,12 @@ for (j in 1:nsim){
                                                ifelse(xsam3$r5v3<3,xsam3$v5v3,
                                                       ifelse(xsam3$r4v3<3,xsam3$v4v3,
                                                              ifelse(xsam3$r3v3<3,xsam3$v3v3,
-                                                                    ifelse(xsam3$r2v3<3,xsam3$v3,
+                                                                    ifelse(xsam3$r2v3<3,xsam3$v2v3,
                                                                            ifelse(xsam3$r1v3<3,xsam3$v1v3,
-                                                                                  ifelse(xsam3$r0v3<3,0.01,0)))))))))))
-  #upper is the first time = 3
-  upper3 <- ifelse(xsam3$r0v3==3,0.01,
+                                                                                  ifelse(xsam3$r0v3<3,0,-0.01)))))))))))
+  
+  #time to precancer diagnosis
+  upper3 <- ifelse(xsam3$r0v3==3,0,
                    ifelse(xsam3$r1v3==3,xsam3$v1v3, 
                           ifelse(xsam3$r2v3==3,xsam3$v2v3,
                                  ifelse(xsam3$r3v3==3,xsam3$v3v3,
@@ -193,78 +196,79 @@ for (j in 1:nsim){
                                                                            ifelse(xsam3$r9v3==3,xsam3$v9v3,
                                                                                   ifelse(xsam3$r10v3==3,xsam3$v10v3,Inf)))))))))))
   
+  #fit non-parametric estimator using EM-ICM
+  #precancer risk following HPV- at initial visit
   F <- cbind(lower3[xsam3$r0v3==0], upper3[xsam3$r0v3==0])  
   drisk_neg <- EMICM(F)  
-  
+
+  #precancer risk following HPV+ at initial visit
   G <- cbind(lower3[xsam3$r0v3>0], upper3[xsam3$r0v3>0])  
   drisk_pos <- EMICM(G)  
   
-  drisk_neg0 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>0))]
-  drisk_pos0 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>0))]
+  drisk_neg0 <- ifelse(length(which(drisk_neg$intmap[2,]<=0))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=0))])
+  drisk_pos0 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=0))]
   
-  drisk_neg0.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>0.5))]
-  drisk_pos0.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>0.5))]
+  drisk_neg0.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=0.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=0.5))])
+  drisk_pos0.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=0.5))]
   
-  drisk_neg1 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>1))]
-  drisk_pos1 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>1))]
+  drisk_neg1 <- ifelse(length(which(drisk_neg$intmap[2,]<=1))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=1))])
+  drisk_pos1 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=1))]
   
-  drisk_neg1.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>1.5))]
-  drisk_pos1.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>1.5))]
+  drisk_neg1.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=1.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=1.5))])
+  drisk_pos1.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=1.5))]
   
-  drisk_neg2 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>2))]
-  drisk_pos2 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>2))]
+  drisk_neg2 <- ifelse(length(which(drisk_neg$intmap[2,]<=2))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=2))])
+  drisk_pos2 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=2))]
   
-  drisk_neg2.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>2.5))]
-  drisk_pos2.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>2.5))]
+  drisk_neg2.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=2.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=2.5))])
+  drisk_pos2.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=2.5))]
   
-  drisk_neg3 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>3))]
-  drisk_pos3 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>3))]
+  drisk_neg3 <- ifelse(length(which(drisk_neg$intmap[2,]<=3))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=3))])
+  drisk_pos3 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=3))]
   
-  drisk_neg3.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>3.5))]
-  drisk_pos3.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>3.5))]
+  drisk_neg3.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=3.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=3.5))])
+  drisk_pos3.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=3.5))]
   
-  drisk_neg4 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>4))]
-  drisk_pos4 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>4))]
+  drisk_neg4 <- ifelse(length(which(drisk_neg$intmap[2,]<=4))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=4))])
+  drisk_pos4 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=4))]
   
-  drisk_neg4.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>4.5))]
-  drisk_pos4.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>4.5))]
+  drisk_neg4.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=4.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=4.5))])
+  drisk_pos4.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=4.5))]
   
-  drisk_neg5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>5))]
-  drisk_pos5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>5))]
+  drisk_neg5 <- ifelse(length(which(drisk_neg$intmap[2,]<=5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=5))])
+  drisk_pos5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=5))]
   
-  drisk_neg5.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>5.5))]
-  drisk_pos5.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>5.5))]
+  drisk_neg5.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=5.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=5.5))])
+  drisk_pos5.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=5.5))]
   
-  drisk_neg6 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>6))]
-  drisk_pos6 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>6))]
+  drisk_neg6 <- ifelse(length(which(drisk_neg$intmap[2,]<=6))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=6))])
+  drisk_pos6 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=6))]
   
-  drisk_neg6.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>6.5))]
-  drisk_pos6.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>6.5))]
+  drisk_neg6.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=6.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=6.5))])
+  drisk_pos6.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=6.5))]
   
-  drisk_neg7 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>7))]
-  drisk_pos7 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>7))]
+  drisk_neg7 <- ifelse(length(which(drisk_neg$intmap[2,]<=7))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=7))])
+  drisk_pos7 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=7))]
   
-  drisk_neg7.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>7.5))]
-  drisk_pos7.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>7.5))]
+  drisk_neg7.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=7.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=7.5))])
+  drisk_pos7.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=7.5))]
   
-  drisk_neg8 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>8))]
-  drisk_pos8 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>8))]
+  drisk_neg8 <- ifelse(length(which(drisk_neg$intmap[2,]<=8))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=8))])
+  drisk_pos8 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=8))]
   
-  drisk_neg8.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>8.5))]
-  drisk_pos8.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>8.5))]
+  drisk_neg8.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=8.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=8.5))])
+  drisk_pos8.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=8.5))]
   
-  drisk_neg9 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>9))]
-  drisk_pos9 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>9))]
+  drisk_neg9 <- ifelse(length(which(drisk_neg$intmap[2,]<=9))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=9))])
+  drisk_pos9 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=9))]
   
-  drisk_neg9.5 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>9.5))]
-  drisk_pos9.5 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>9.5))]
+  drisk_neg9.5 <- ifelse(length(which(drisk_neg$intmap[2,]<=9.5))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=9.5))])
+  drisk_pos9.5 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=9.5))]
   
-  drisk_neg10 <- drisk_neg$sigma[min(which(drisk_neg$intmap[2,]>10))]
-  drisk_pos10 <- drisk_pos$sigma[min(which(drisk_pos$intmap[2,]>10))]
+  drisk_neg10 <- ifelse(length(which(drisk_neg$intmap[2,]<=10))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=10))])
+  drisk_pos10 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=10))]
   
-  frisk_neg0 <- 0 #for completeness
-  #Dependent New HPV
-  
+  #Time of Detecting Incident HPV
   dnewhpv_t <- ifelse(xsam3$r0v3>0,0, #these were HPV+ at start
                       ifelse(xsam3$r1v3>0,xsam3$v1v3,
                              ifelse(xsam3$r2v3>0,xsam3$v2v3,
@@ -277,10 +281,11 @@ for (j in 1:nsim){
                                                                               ifelse(xsam3$r9v3>0,xsam3$v9v3,
                                                                                      ifelse(xsam3$r10v3>0,xsam3$v10v3,NA))))))))))) #these were never HPV+
   
-  
-  #Then code last time before precancer detection
-  dnlower <-  ifelse(is.na(dnewhpv_t)==1 | dnewhpv_t==0,NA,  #these were never HPV+ or were HPV+ at time 0; make all NA's (HPV-)and 0's (HPV+ at r0) NA
-                     ifelse(xsam3$r10v3 < 3 & dnewhpv_t <= xsam3$v10v3, xsam3$v10v3-dnewhpv_t, #if patient tested HPV+ at year 10 and they first tested HPV+ at or before year 10, time between first HPV+ test and their latest visit
+  #Relative to time of detecting incident HPV, time interval in which precancer occurred
+  #precancers present at time of first HPV detection occur in time interval (-0.01,0]
+  #time to last precancer negative assessment
+  dnlower <-  ifelse(is.na(dnewhpv_t)==1 | dnewhpv_t==0,NA,  #these were never HPV+ or were HPV+ at time 0
+                     ifelse(xsam3$r10v3 < 3 & dnewhpv_t <= xsam3$v10v3, xsam3$v10v3-dnewhpv_t,
                             ifelse(xsam3$r9v3 < 3 & dnewhpv_t <= xsam3$v9v3, xsam3$v9v3-dnewhpv_t,
                                    ifelse(xsam3$r8v3 < 3 & dnewhpv_t <= xsam3$v8v3, xsam3$v8v3-dnewhpv_t,
                                           ifelse(xsam3$r7v3 < 3 & dnewhpv_t <= xsam3$v7v3, xsam3$v7v3-dnewhpv_t,
@@ -290,11 +295,9 @@ for (j in 1:nsim){
                                                                       ifelse(xsam3$r3v3 < 3 & dnewhpv_t <= xsam3$v3v3, xsam3$v3v3-dnewhpv_t,
                                                                              ifelse(xsam3$r2v3 < 3 & dnewhpv_t <= xsam3$v2v3, xsam3$v2v3-dnewhpv_t,
                                                                                     ifelse(xsam3$r1v3 < 3 & dnewhpv_t <= xsam3$v1v3, xsam3$v1v3-dnewhpv_t,
-                                                                                           ifelse(xsam3$r0v3 < 3 & dnewhpv_t <= 0, 0-dnewhpv_t, -0.01)))))))))))) #positive or negative 0.01? 
-  
-  dnlower[is.na(dnlower)==0 & dnlower <= 0] <- dnlower[is.na(dnlower)==0 & dnlower <= 0]+0.01  #-0.01 and 0 became 0 and 0.01  respectively; what's the point of doing this? 
-  
-  #Then code time of precancer detection
+                                                                                           ifelse(xsam3$r0v3 < 3 & dnewhpv_t <= 0, 0, -0.01))))))))))))
+
+  #time to precancer detection
   dnupper <- ifelse(is.na(dnewhpv_t)==1 | dnewhpv_t==0,NA, #these were never HPV+ or were HPV+ at time 0
                     ifelse(xsam3$r1v3==3 & dnewhpv_t<=xsam3$v1v3,xsam3$v1v3-dnewhpv_t,
                            ifelse(xsam3$r2v3==3 & dnewhpv_t<=xsam3$v2v3,xsam3$v2v3-dnewhpv_t,
@@ -307,13 +310,12 @@ for (j in 1:nsim){
                                                                             ifelse(xsam3$r9v3==3 & dnewhpv_t<=xsam3$v9v3,xsam3$v9v3-dnewhpv_t,
                                                                                    ifelse(xsam3$r10v3==3 & dnewhpv_t<=xsam3$v10v3,xsam3$v10v3-dnewhpv_t,Inf)))))))))))
   
-  dnupper[is.na(dnupper)==0 & dnupper==0] <- dnupper[is.na(dnupper)==0 & dnupper==0]+ 0.01 #similar format as other coding of upper_2
-  
+  #fit non-parametric estimator using EM-ICM
   H <- cbind(dnlower[is.na(dnlower)==0], dnupper[is.na(dnupper)==0])
   dnfit <- EMICM(H)
   
-  #risk for new hpv+ at depedent intervals
-  dnrisk_0 <- dnfit$sigma[min(which(dnfit$intmap[2,]>0))] #estimated risk at t0; select columns where bottom row of intmap (time)>0, min takes earliest occurrence of that
+  #risk for new hpv+ under follow-up avoidance
+  dnrisk_0 <- dnfit$sigma[max(which(dnfit$intmap[2,]<=0))] #estimated risk at t0; select columns where bottom row of intmap (time)>0, min takes earliest occurrence of that
   dnrisk_0.5 <- dnfit$sigma[max(which(dnfit$intmap[2,]<=0.5))]
   dnrisk_1 <- dnfit$sigma[max(which(dnfit$intmap[2,]<=1))]
   dnrisk_1.5 <- dnfit$sigma[max(which(dnfit$intmap[2,]<=1.5))]
@@ -335,7 +337,6 @@ for (j in 1:nsim){
   dnrisk_9.5 <- dnfit$sigma[max(which(dnfit$intmap[2,]<=9.5))]
   dnrisk_10 <- dnfit$sigma[max(which(dnfit$intmap[2,]<=10))]
   
-  frisk_neg0 <- 0 #for completeness
   saveres <- data.frame(drisk_neg0, drisk_neg0.5,drisk_neg1,drisk_neg1.5,drisk_neg2,drisk_neg2.5,drisk_neg3,drisk_neg3.5,drisk_neg4,drisk_neg4.5,drisk_neg5,drisk_neg5.5,drisk_neg6,drisk_neg6.5,drisk_neg7,drisk_neg7.5,drisk_neg8,drisk_neg8.5,drisk_neg9,drisk_neg9.5,drisk_neg10,
                         drisk_pos0, drisk_pos0.5,drisk_pos1,drisk_pos1.5,drisk_pos2,drisk_pos2.5,drisk_pos3,drisk_pos3.5,drisk_pos4,drisk_pos4.5,drisk_pos5,drisk_pos5.5,drisk_pos6,drisk_pos6.5,drisk_pos7,drisk_pos7.5,drisk_pos8,drisk_pos8.5,drisk_pos9,drisk_pos9.5,drisk_pos10,
                         dnrisk_0, dnrisk_0.5,dnrisk_1,dnrisk_1.5,dnrisk_2,dnrisk_2.5,dnrisk_3,dnrisk_3.5,dnrisk_4,dnrisk_4.5,dnrisk_5,dnrisk_5.5,dnrisk_6,dnrisk_6.5,dnrisk_7,dnrisk_7.5,dnrisk_8,dnrisk_8.5,dnrisk_9,dnrisk_9.5,dnrisk_10)
@@ -345,4 +346,4 @@ for (j in 1:nsim){
 
 simsum[simsum==1] <- NA
 simmean <- colMeans(simsum, na.rm=TRUE)
-save(simsum,file="~/Desktop/HPVCPC_Exp2.RData")
+save(simsum,file="~/Desktop/HPVCPC_Exp3.RData")
