@@ -196,12 +196,14 @@ for (j in 1:nsim){
                                                                            ifelse(xsam3$r9v3==3,xsam3$v9v3,
                                                                                   ifelse(xsam3$r10v3==3,xsam3$v10v3,Inf)))))))))))
   
+  #EM-ICM model for precancer risk (HPV- at first visit and HPV+ at first visit)
   F <- cbind(lower3[xsam3$r0v3==0], upper3[xsam3$r0v3==0])  
   drisk_neg <- EMICM(F)  
   
   G <- cbind(lower3[xsam3$r0v3>0], upper3[xsam3$r0v3>0])  
   drisk_pos <- EMICM(G)  
   
+  #save risk estimates
   drisk_neg0 <- ifelse(length(which(drisk_neg$intmap[2,]<=0))==0,0,drisk_neg$sigma[max(which(drisk_neg$intmap[2,]<=0))])
   drisk_pos0 <- drisk_pos$sigma[max(which(drisk_pos$intmap[2,]<=0))]
   
