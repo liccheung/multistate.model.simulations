@@ -148,7 +148,8 @@ theta <- c(lambda1,1/scale21,1/scale22)
 #estimate for baseline HPV+, baseline HPV-, and new HPV+ (where the previous recorded visit was HPV-)
 hpvcc.msm <- msm(state ~ years, subject=id, data=obsdat, qmatrix=Q, opt.method="optim")
 
-p <- pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3]/(pmatrix.msm(hpvcc.msm,t1=0,t=10)[1,2]+pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3])
+#prevalent precancer if new HPV infection detected at year 5
+p <- pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3]/(pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,2]+pmatrix.msm(hpvcc.msm,t1=0,t=5)[1,3])
 res <- c(hpvcc.msm$estimates.t,
          hpvcc.msm$QmatricesSE$baseline[1,2],hpvcc.msm$QmatricesSE$baseline[2,1],hpvcc.msm$QmatricesSE$baseline[2,3],
          hpvcc.msm$QmatricesL$baseline[1,2]<=0.055 & hpvcc.msm$QmatricesU$baseline[1,2]>=0.055,
